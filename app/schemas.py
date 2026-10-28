@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import urlparse
+import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -67,6 +68,26 @@ class PreferenceUpdate(BaseModel):
         return value
 
 
+
+_CYRILLIC_TO_LATIN = str.maketrans({
+    "а": "a",  "б": "b",  "в": "v",  "г": "g",  "д": "d",  "е": "e",  "ж": "zh",
+    "з": "z",  "и": "i",  "й": "y",  "к": "k",  "л": "l",  "м": "m",  "н": "n",
+    "о": "o",  "п": "p",  "р": "r",  "с": "s",  "т": "t",  "у": "u",  "ф": "f",
+    "х": "h",  "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sht", "ъ": "a",  "ь": "y",
+    "ю": "yu", "я": "ya",
+    "А": "A",  "Б": "B",  "В": "V",  "Г": "G",  "Д": "D",  "Е": "E",  "Ж": "Zh",
+    "З": "Z",  "И": "I",  "Й": "Y",  "К": "K",  "Л": "L",  "М": "M",  "Н": "N",
+    "О": "O",  "П": "P",  "Р": "R",  "С": "S",  "Т": "T",  "У": "U",  "Ф": "F",
+    "Х": "H",  "Ц": "Ts", "Ч": "Ch", "Ш": "Sh", "Щ": "Sht", "Ъ": "A",  "Ь": "Y",
+    "Ю": "Yu", "Я": "Ya",
+})
+
+
+def slugify(value: str) -> str:
+    value = value.translate(_CYRILLIC_TO_LATIN).lower()
+    value = re.sub(r"[^a-z0-9]+", "-", value)
+    return value.strip("-") or "destination"
+
 class DestinationCreate(BaseModel):
     slug: str = Field(min_length=2, max_length=180, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     name: str = Field(min_length=2, max_length=240)
@@ -88,6 +109,14 @@ class DestinationCreate(BaseModel):
     verification_status: Literal["unverified", "reviewed", "verified", "conflicting"] = "unverified"
     source_url: str | None = Field(default=None, max_length=500)
     information: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_slug_from_name(cls, data):
+        if isinstance(data, dict) and not data.get("slug"):
+            name = data.get("name") or ""
+            data = {**data, "slug": slugify(name)}
+        return data
 
     @field_validator("website", "source_url")
     @classmethod

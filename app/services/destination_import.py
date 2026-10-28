@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -39,10 +40,24 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
     return DestinationCreate.model_validate(item).model_dump()
 
 
-def make_slug(name: str) -> str:
-    # Slugs can also be supplied explicitly when transliteration is important.
-    normalized = "-".join(str(name).casefold().split())
-    return "".join(char for char in normalized if char.isalnum() or char == "-")
+_CYRILLIC_TO_LATIN = str.maketrans({
+    "а": "a",  "б": "b",  "в": "v",  "г": "g",  "д": "d",  "е": "e",  "ж": "zh",
+    "з": "z",  "и": "i",  "й": "y",  "к": "k",  "л": "l",  "м": "m",  "н": "n",
+    "о": "o",  "п": "p",  "р": "r",  "с": "s",  "т": "t",  "у": "u",  "ф": "f",
+    "х": "h",  "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sht", "ъ": "a",  "ь": "y",
+    "ю": "yu", "я": "ya",
+    "А": "A",  "Б": "B",  "В": "V",  "Г": "G",  "Д": "D",  "Е": "E",  "Ж": "Zh",
+    "З": "Z",  "И": "I",  "Й": "Y",  "К": "K",  "Л": "L",  "М": "M",  "Н": "N",
+    "О": "O",  "П": "P",  "Р": "R",  "С": "S",  "Т": "T",  "У": "U",  "Ф": "F",
+    "Х": "H",  "Ц": "Ts", "Ч": "Ch", "Ш": "Sh", "Щ": "Sht", "Ъ": "A",  "Ь": "Y",
+    "Ю": "Yu", "Я": "Ya",
+})
+
+
+def make_slug(value: str) -> str:
+    text = (value or "").translate(_CYRILLIC_TO_LATIN).lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text or "destination"
 
 
 def upsert_destinations(db: Session, records: list[dict[str, Any]]) -> tuple[int, int]:
