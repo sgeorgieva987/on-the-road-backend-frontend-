@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 import logging
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -22,9 +23,18 @@ logger = logging.getLogger("on-the-road-bulgaria")
 async def lifespan(app: FastAPI):
     if settings.app_env.lower() == "production" and settings.jwt_secret_key.startswith("replace-this"):
         raise RuntimeError("Set JWT_SECRET_KEY to a secure random value before production deployment")
+
     project_root = Path(__file__).resolve().parents[1]
-    alembic_config = Config(str(project_root / "alembic.ini"))
-    command.upgrade(alembic_config, "head")
+
+    # NOTE: Alembic migrations must be run manually before starting the app:
+    #     alembic upgrade head
+    # Running them inside the lifespan hook hangs on SQLite because
+    # batch_alter_table needs a write lock while the app already holds one.
+    # Set RUN_MIGRATIONS_ON_STARTUP=1 in .env only if you really need it.
+    if os.getenv("RUN_MIGRATIONS_ON_STARTUP") == "1":
+        alembic_config = Config(str(project_root / "alembic.ini"))
+        command.upgrade(alembic_config, "head")
+
     settings.upload_dir.resolve().mkdir(parents=True, exist_ok=True)
     with SessionLocal() as db:
         json_path = project_root / "app" / "data" / "destinations.json"
